@@ -1,0 +1,110 @@
+import streamlit as st
+import pandas as pd
+
+# ---------------- CONFIG ----------------
+st.set_page_config(
+    page_title="Internal Dashboard",
+    layout="wide"
+)
+
+# ---------------- DATA LOADERS ----------------
+@st.cache_data
+def load_irradiation():
+    return pd.read_csv(
+        "data.csv",
+        parse_dates=["timestamp"]
+    )
+
+@st.cache_data
+def load_rd():
+    return pd.read_csv(
+        "monthly_2025_01.csv",
+        parse_dates=["timestamp"]
+    )
+
+# ---------------- SIDEBAR ----------------
+st.sidebar.title("Dashboard Menu")
+
+page = st.sidebar.radio(
+    "Select Page",
+    ["Irradiation Data", "RD Monthly Details"]
+)
+
+# ==============================
+# PAGE 1: IRRADIATION DATA
+# ==============================
+if page == "Irradiation Data":
+    st.title("☀️ Irradiation Data")
+
+    df = load_irradiation()
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        start_date = st.date_input(
+            "Start Date",
+            df["timestamp"].min().date()
+        )
+
+    with col2:
+        end_date = st.date_input(
+            "End Date",
+            df["timestamp"].max().date()
+        )
+
+    filtered_df = df[
+        (df["timestamp"].dt.date >= start_date) &
+        (df["timestamp"].dt.date <= end_date)
+    ]
+
+    st.subheader("Filtered Data")
+    st.dataframe(filtered_df, use_container_width=True)
+
+    csv = filtered_df.to_csv(index=False).encode("utf-8")
+
+    st.download_button(
+        label="⬇️ Download CSV",
+        data=csv,
+        file_name="irradiation_filtered.csv",
+        mime="text/csv"
+    )
+
+# ==============================
+# PAGE 2: RD MONTHLY DETAILS
+# ==============================
+elif page == "RD Monthly Details":
+    st.title("📊 RD Monthly Details")
+
+    df = load_rd()
+
+    # --- Filters ---
+    sites = sorted(df["site"].unique())
+    site = st.selectbox("Select Site", sites)
+
+    years = sorted(df["timestamp"].dt.year.unique())
+    year = st.selectbox("Select Year", years)
+
+    months = sorted(df["timestamp"].dt.month.unique())
+    month = st.selectbox("Select Month", months)
+
+    filtered_df = df[
+        (df["site"] == site) &
+        (df["timestamp"].dt.year == year) &
+        (df["timestamp"].dt.month == month)
+    ]
+
+    # --- Aggregation ---
+    st.subheader("Monthly Aggregation")
+
+    agg = (
+        filtered_df
+        .groupby("site", as_index=False)["loss"]
+        .sum()
+        .rename(columns={"loss": "Total Loss"})
+    )
+
+    st.dataframe(agg, use_container_width=True)
+
+    # --- Detailed View ---
+    st.subheader("Detailed Data")
+    st.dataframe(filtered_df, use_container_width=True)
